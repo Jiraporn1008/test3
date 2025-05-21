@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -109,5 +109,90 @@ function toTable(data) {
 }
 </script>
 
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Excel Data Mapper</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <h1>Excel File Mapper</h1>
+  <input type="file" id="files" multiple accept=".xls,.xlsx" />
+  <div id="output"></div>
+
+  <script>
+    document.getElementById('files').addEventListener('change', handleFiles);
+
+    function handleFiles(event) {
+      const files = event.target.files;
+      const dailyReports = [];
+      const newEmployees = [];
+      const readPromises = [];
+
+      for (const file of files) {
+        const reader = new FileReader();
+        readPromises.push(new Promise((resolve, reject) => {
+          reader.onload = e => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(sheet);
+
+            if (file.name.startsWith("Daily report_")) {
+              dailyReports.push({ name: file.name, data: json });
+            } else if (file.name.startsWith("New Employee_")) {
+              newEmployees.push({ name: file.name, data: json });
+            }
+            resolve();
+          };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(file);
+        }));
+      }
+
+      Promise.all(readPromises).then(() => {
+        const output = document.getElementById('output');
+        output.innerHTML = "<h2>Results</h2>";
+
+        const allEmployees = [].concat(...newEmployees.map(f => f.data));
+        const dashboard = [];
+
+        dailyReports.forEach(file => {
+          const parts = file.name.replace('.xls', '').split('_');
+          const teamMember = parts.slice(-2).join(' ');
+
+          file.data.forEach(row => {
+            const candidate = row["Candidate Name"];
+            const matched = allEmployees.find(emp => emp["Employee Name"] === candidate);
+            if (matched) {
+              dashboard.push({
+                "Employee Name": matched["Employee Name"],
+                "Join Date": matched["Join Date"],
+                "Role": matched["Role"],
+                "Team Member": teamMember
+              });
+            }
+          });
+        });
+
+        output.innerHTML += generateTable(dashboard);
+      });
+    }
+
+    function generateTable(data) {
+      if (!data.length) return "<p>No data found.</p>";
+      const keys = Object.keys(data[0]);
+      let html = "<table border='1'><tr>" + keys.map(k => `<th>${k}</th>`).join("") + "</tr>";
+      data.forEach(row => {
+        html += "<tr>" + keys.map(k => `<td>${row[k] ?? ""}</td>`).join("") + "</tr>";
+      });
+      html += "</table>";
+      return html;
+    }
+  </script>
 </body>
 </html>
