@@ -112,7 +112,7 @@ function toTable(data) {
 </body>
 </html> -->
 
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -194,5 +194,118 @@ function toTable(data) {
       return html;
     }
   </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Excel Data Mapper</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+    th, td { border: 1px solid #999; padding: 8px; text-align: left; }
+    th { background: #eee; }
+    h2, h3 { margin-top: 2em; }
+  </style>
+</head>
+<body>
+
+<h1>Excel File Mapper</h1>
+<p>Upload your <strong>Daily report_*.xls</strong> and <strong>New Employee_*.xls</strong> files below.</p>
+<input type="file" id="files" multiple accept=".xls,.xlsx" />
+
+<div id="output"></div>
+
+<script>
+document.getElementById('files').addEventListener('change', handleFiles);
+
+function handleFiles(event) {
+  const files = event.target.files;
+  const dailyReports = [];
+  const newEmployees = [];
+  const readPromises = [];
+
+  for (const file of files) {
+    const reader = new FileReader();
+    readPromises.push(new Promise((resolve, reject) => {
+      reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        if (file.name.startsWith("Daily report_")) {
+          dailyReports.push({ name: file.name, data: json });
+        } else if (file.name.startsWith("New Employee_")) {
+          newEmployees.push({ name: file.name, data: json });
+        }
+
+        resolve();
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    }));
+  }
+
+  Promise.all(readPromises).then(() => {
+    const output = document.getElementById('output');
+    output.innerHTML = "";
+
+    // Show raw daily reports
+    dailyReports.forEach(file => {
+      output.innerHTML += `<h3>Daily Report: ${file.name}</h3>` + toTable(file.data);
+    });
+
+    // Show raw new employees
+    newEmployees.forEach(file => {
+      output.innerHTML += `<h3>New Employees: ${file.name}</h3>` + toTable(file.data);
+    });
+
+    // Combine new employee data
+    const allEmployees = [].concat(...newEmployees.map(f => f.data));
+
+    // Map data
+    const dashboard = [];
+
+    dailyReports.forEach(file => {
+      const parts = file.name.replace('.xls', '').split('_');
+      const teamMember = parts.slice(-2).join(' '); // e.g., "John Smith"
+
+      file.data.forEach(row => {
+        const candidate = row["Candidate Name"];
+        const matched = allEmployees.find(emp => emp["Employee Name"] === candidate);
+        if (matched) {
+          dashboard.push({
+            "Employee Name": matched["Employee Name"],
+            "Join Date": matched["Join Date"],
+            "Role": matched["Role"],
+            "Team Member": teamMember
+          });
+        }
+      });
+    });
+
+    output.innerHTML += `<h2>📊 Employee Dashboard</h2>` + toTable(dashboard);
+  });
+}
+
+function toTable(data) {
+  if (!data.length) return "<p><em>No data available.</em></p>";
+
+  const keys = Object.keys(data[0]);
+  let html = "<table><thead><tr>" + keys.map(k => `<th>${k}</th>`).join('') + "</tr></thead><tbody>";
+
+  for (const row of data) {
+    html += "<tr>" + keys.map(k => `<td>${row[k] || ""}</td>`).join('') + "</tr>";
+  }
+
+  html += "</tbody></table>";
+  return html;
+}
+</script>
+
 </body>
 </html>
